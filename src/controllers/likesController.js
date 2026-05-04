@@ -1,0 +1,53 @@
+import sql from '../config/db.js'
+import { createNotification } from './notificationsController.js'
+
+// get likes
+export const getLikes = async (c) => {
+    const likes = await sql`SELECT * FROM likes`
+    return c.json(likes)
+}
+
+// get likes by post
+export const getLikesByPost = async (c) => {
+    const postId = c.req.param("postId")
+    const likes = await sql`SELECT * FROM likes WHERE post_id = ${postId}`
+    if (!likes.length) return c.json({ message: "No likes found for this post" }, 404)
+    return c.json(likes)
+}
+
+// like post
+export const likePost = async (c) => {
+    const payload = c.get("jwtPayload")
+    const userId = payload.userId
+    const body = await c.req.json()
+    const { postId } = body
+
+    // check if already liked - SQL uses AND not &&
+    const [existingLike] = await sql`SELECT * FROM likes WHERE user_id = ${userId} AND post_id = ${postId}`
+    if (existingLike) return c.json({ message: "Already liked" }, 400)
+
+    const [newLike] = await sql`
+        INSERT INTO likes (user_id, post_id)
+        VALUES (${userId}, ${postId})
+        RETURNING *
+    `
+
+    // notification
+    const [post] = await sql`SELECT * FROM posts WHERE id = ${postId}`
+    if (post) createNotification(post.user_id, userId, "like", postId)
+
+    return c.json(newLike, 201)
+}
+
+// unlike post
+export const unlikePost = async (c) => {
+    const payload = c.get("jwtPayload")
+    const userId = payload.userId
+    const body = await c.req.json()
+    const { postId } = body
+
+    const [like] = await sql`DELETE FROM likes WHERE user_id = ${userId} AND post_id = ${postId} RETURNING *`
+    if (!like) return c.json({ message: "Like not found" }, 404)
+
+    return c.json({ message: "Post unliked successfully" })
+}

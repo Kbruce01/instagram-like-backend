@@ -1,0 +1,17 @@
+{
+  "name": "instagram-backend",
+  "module": "src/index.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun --hot run src/index.js",
+    "start": "bun run src/index.js"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "dependencies": {
+    "ioredis": "^5.10.1",
+    "postgres": "^3.4.9"
+  }
+}
