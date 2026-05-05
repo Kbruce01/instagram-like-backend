@@ -1,18 +1,13 @@
-import { posts } from '../data/posts.js'
-import { followers } from '../data/followers.js'
+import sql from '../config/db.js'
 import redis from '../config/redis.js'
 
-//get feed
 export const getFeed = async (c) => {
-
-    // step 1 - get logged in user id from token
     const payload = c.get("jwtPayload")
     const userId = payload.userId
 
-    //caching with redis 
+    // check cache first
     const cacheKey = `feed:${userId}`
     const cachedFeed = await redis.get(cacheKey)
-
     if (cachedFeed) {
         console.log("cache hit")
         return c.json(JSON.parse(cachedFeed))
@@ -21,15 +16,16 @@ export const getFeed = async (c) => {
     console.log("Cache miss - fetching from database")
 
     // step 2 - get all users the logged in user follows
-    const following = followers.filter(f => f.followerId === userId)
+    const following = await sql`SELECT * FROM followers WHERE follower_id = ${userId}`
     if (!following.length) return c.json({ message: "You are not following anyone" }, 404)
 
     // step 3 - get all posts from followed users
-    const feedPosts = posts.filter(p => following.some(f => f.followingId === p.userId))
+    const followingIds = following.map(f => f.following_id)
+    const feedPosts = await sql`SELECT * FROM posts WHERE user_id = ANY(${followingIds})`
     if (!feedPosts.length) return c.json({ message: "No posts in your feed" }, 404)
 
     // step 4 - sort by newest first
-    feedPosts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    feedPosts.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
 
     // step 5 - paginate
     const page = Number(c.req.query("page")) || 1
@@ -38,7 +34,6 @@ export const getFeed = async (c) => {
     const end = start + limit
     const paginatedPosts = feedPosts.slice(start, end)
 
-   // save the the data and call it later 
     const response = {
         page,
         limit,
@@ -46,7 +41,7 @@ export const getFeed = async (c) => {
         posts: paginatedPosts
     }
 
-    //store in cache for 60 secs 
+    // store in cache for 60 seconds
     await redis.set(cacheKey, JSON.stringify(response), "EX", 60)
     return c.json(response)
-};
+}

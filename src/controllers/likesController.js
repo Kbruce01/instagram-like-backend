@@ -22,7 +22,6 @@ export const likePost = async (c) => {
     const body = await c.req.json()
     const { postId } = body
 
-    // check if already liked - SQL uses AND not &&
     const [existingLike] = await sql`SELECT * FROM likes WHERE user_id = ${userId} AND post_id = ${postId}`
     if (existingLike) return c.json({ message: "Already liked" }, 400)
 
@@ -32,7 +31,8 @@ export const likePost = async (c) => {
         RETURNING *
     `
 
-    // notification
+    await sql`UPDATE posts SET likes_count = likes_count + 1 WHERE id = ${postId}`
+
     const [post] = await sql`SELECT * FROM posts WHERE id = ${postId}`
     if (post) createNotification(post.user_id, userId, "like", postId)
 
@@ -48,6 +48,8 @@ export const unlikePost = async (c) => {
 
     const [like] = await sql`DELETE FROM likes WHERE user_id = ${userId} AND post_id = ${postId} RETURNING *`
     if (!like) return c.json({ message: "Like not found" }, 404)
+
+    await sql`UPDATE posts SET likes_count = likes_count - 1 WHERE id = ${postId}`
 
     return c.json({ message: "Post unliked successfully" })
 }
